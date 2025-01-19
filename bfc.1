@@ -1,0 +1,56 @@
+.Dd January 19, 2025
+.Dt bfc 1
+.Os
+.
+.Sh NAME
+.Nm bfc
+.Nd brainfuck compiler
+.
+.Sh SYNOPSIS
+.Nm
+.Op Fl o Ar out_file
+.Op Fl S
+.Op Fl c
+.Op Fl v
+.Op Fl C Ar bfc1_path
+.Op Fl a Ar as_path
+.Op Fl l Ar ld_path
+.Op Fl h
+.
+.Sh DESCRIPTION
+Simple implementation of brainfuck language compiler.
+.Pp
+First argument is input source code file,
+other arguments is flags for compiler.
+These are options you can pass to
+.Nm :
+.Bl -tag -width Ds
+.It Fl o Ar out_file
+Output file path, default is "a.out"
+.It Fl S
+Not compile assembly code.
+.It Fl c
+Not link object file.
+.It Fl v
+Verbose mode, show all running commands.
+.It Fl C Ar bfc1_path
+Path to real compiler.
+.It Fl a Ar as_path
+Path to assembler.
+.It Fl l Ar ld_path
+Path to linker.
+.It Fl h
+Print help messange.
+.El
+.
+.Sh EXIT STATUS
+Normal exit status is 0,
+if compiler recive error in argument parsing it return 1 exit code,
+if compiler can't create temoraly file for compiling it return 2 exit code.
+.
+.Sh BUGS
+If you find any bug you can tell me about them in
+.Lk https://github.com/gimura2022/bfc/issues here .
+.
+.Sh AUTHORS
+.An gimura2022 Aq Mt gimura0001@gmail.com
