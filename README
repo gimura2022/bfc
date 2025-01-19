@@ -1,21 +1,42 @@
-README(7)	       Miscellaneous Information Manual		     README(7)
+bfc(1)			    General Commands Manual			bfc(1)
 
 NAME
      bfc – brainfuck compiler
 
+SYNOPSIS
+     bfc [-o out_file] [-S] [-c] [-v] [-C bfc1_path] [-a as_path] [-l ld_path]
+	 [-h]
+
 DESCRIPTION
      Simple implementation of brainfuck language compiler.
 
-INSTALL
-     To compile and install run...
+     First argument is input source code file, other arguments is flags for
+     compiler.	These are options you can pass to bfc:
 
-	   make
-	   make install
+     -o out_file
+	     Output file path, default is "a.out"
 
-      ...but you need permision to write in PREFIX
+     -S	     Not compile assembly code.
 
-SEE ALSO
-     bfc(1)
+     -c	     Not link object file.
+
+     -v	     Verbose mode, show all running commands.
+
+     -C bfc1_path
+	     Path to real compiler.
+
+     -a as_path
+	     Path to assembler.
+
+     -l ld_path
+	     Path to linker.
+
+     -h	     Print help messange.
+
+EXIT STATUS
+     Normal exit status is 0, if compiler recive error in argument parsing it
+     return 1 exit code, if compiler can't create temoraly file for compiling
+     it return 2 exit code.
 
 BUGS
      If you find any bug you can tell me about them in here:

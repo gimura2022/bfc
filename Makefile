@@ -25,5 +25,5 @@ uninstall:
 	$(RM) $(PREFIX)/bin/bfc1
 	$(RM) $(PREFIX)/share/man/man1/bfc.1
 
-README: README.7
+README: bfc.1
 	mandoc $< | col -b > $@
