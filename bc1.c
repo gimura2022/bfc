@@ -600,7 +600,7 @@ int main(int argc, char* argv[])
 	compile(prog_buf);
 	dispence_registers();
 
-	FILE* out = fopen("out.s", "w");
+	FILE* out = fopen(out_path, "w");
 	if (out == NULL)
 		return 1;
 
