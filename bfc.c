@@ -21,7 +21,7 @@ static void usage(bool small, FILE* stream)
 }
 
 #define DEFAULT_OUT_NAME "a.out"
-#define DEFAULT_BC1_PATH "./bc1"
+#define DEFAULT_BC1_PATH "bc1"
 #define DEFAULT_AS_PATH "as"
 #define DEFAULT_LD_PATH "ld"
 
