@@ -1,0 +1,27 @@
+README(7)	       Miscellaneous Information Manual		     README(7)
+
+NAME
+     bfc – brainfuck compiler
+
+DESCRIPTION
+     Simple implementation of brainfuck language compiler.
+
+INSTALL
+     To compile and install run...
+
+	   make
+	   make install
+
+      ...but you need permision to write in PREFIX
+
+SEE ALSO
+     bfc(1)
+
+BUGS
+     If you find any bug you can tell me about them in here:
+     https://github.com/gimura2022/bfc/issues.
+
+AUTHORS
+     gimura2022 <gimura0001@gmail.com>
+
+Debian			       January 19, 2025				Debian
