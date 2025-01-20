@@ -27,12 +27,21 @@
 
 enum var_type {
 	VAR_PROG = 0,
+	
 	VAR_STACK,
 	VAR_REGISTER,
+
 	VAR_CONST,
 	VAR_CONST_STR,
+
 	VAR_LABEL,
-	VAR_REGISTER_PTR,
+};
+
+enum cmd_size {
+	CMD_BYTE = 0,
+	CMD_WORD,
+	CMD_DWORD,
+	CMD_QWORD,
 };
 
 enum reg {
@@ -51,7 +60,6 @@ enum reg {
 	REG_RDX,
 	REG_RBP,
 	REG_RSP,
-	REG_R10,
 };
 
 struct var {
@@ -79,11 +87,11 @@ enum cmd_type {
 	CMD_LEA,
 	CMD_PUSH,
 	CMD_POP,
-	CMD_MOVB,
 };
 
 struct cmd {
 	enum cmd_type type;
+	enum cmd_size size;
 
 	struct var* arg0;
 	struct var* arg1;
@@ -134,7 +142,7 @@ static struct var* add_var(struct var* var)
 static void compile_syscall(struct var* num, struct var* arg0, struct var* arg1, struct var* arg2)
 {
 #	define move_to_reg(x, y) \
-		add_cmd(&(struct cmd) { .type = CMD_MOV, .arg0 = x, \
+		add_cmd(&(struct cmd) { .type = CMD_MOV, .arg0 = x, .size = CMD_QWORD,  \
 				.arg1 = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = y })});
 
 	move_to_reg(num, REG_RAX);
@@ -150,22 +158,27 @@ static void compile_syscall(struct var* num, struct var* arg0, struct var* arg1,
 static void clear_var(struct var* var)
 {
 	struct var* zero_var = add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 });
-	add_cmd(&(struct cmd) { .type = CMD_MOVB, .arg0 = zero_var, .arg1 = var });
+	add_cmd(&(struct cmd) { .type = CMD_MOV, .size = CMD_BYTE, .arg0 = zero_var, .arg1 = var });
 }
 
-static void compile(const char* str)
+static void generate_prolouge(void)
 {
 	add_cmd(&(struct cmd) { .type = CMD_LABEL, .arg0 = NULL, .arg1 = NULL,
 			.label = add_label(&(struct label) { .type = LABEL_GLOBL, .name = "_start" })});
 
 	struct var* rbp = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RBP });
 	struct var* rsp = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSP }); 
-	add_cmd(&(struct cmd) { .type = CMD_MOV, .arg0 = rsp, .arg1 = rbp } );
-
-	struct var* zero_var = add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 });
+	add_cmd(&(struct cmd) { .type = CMD_MOV, .size = CMD_QWORD, .arg0 = rsp, .arg1 = rbp } );
 
 	var_stdin  = add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 });
 	var_stdout = add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 });
+}
+
+static void compile(const char* str)
+{
+	generate_prolouge();
+
+	struct var* zero_var = add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 });
 
 	clear_var(&bf_vars[0]);
 
@@ -211,6 +224,7 @@ static void compile(const char* str)
 
 		add_cmd(&(struct cmd) {
 				.type = CMD_ADD,
+				.size = CMD_BYTE,
 				.arg0 = add_var(&(struct var) {
 						.type = VAR_CONST, .value.value = add_count}),
 				.arg1 = &bf_vars[var_count],
@@ -226,6 +240,7 @@ static void compile(const char* str)
 
 		add_cmd(&(struct cmd) {
 				.type = CMD_SUB,
+				.size = CMD_BYTE,
 				.arg0 = add_var(&(struct var) {
 						.type = VAR_CONST, .value.value = sub_count}),
 				.arg1 = &bf_vars[var_count],
@@ -240,8 +255,8 @@ static void compile(const char* str)
 		add_cmd(&(struct cmd) { .type = CMD_LABEL, .arg0 = 0, .arg1 = 0, .label = label });
 
 		struct var* ah = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_AH });
-		add_cmd(&(struct cmd) { .type = CMD_MOV, .arg0 = &bf_vars[var_count], .arg1 = ah });
-		add_cmd(&(struct cmd) { .type = CMD_CMP, .arg0 = zero_var, .arg1 = ah });
+		add_cmd(&(struct cmd) { .type = CMD_MOV, .size = CMD_BYTE, .arg0 = &bf_vars[var_count], .arg1 = ah });
+		add_cmd(&(struct cmd) { .type = CMD_CMP, .size = CMD_BYTE, .arg0 = zero_var, .arg1 = ah });
 
 		struct var* end_label = add_var(&(struct var) { .type = VAR_LABEL });
 		sprintf(end_label->value.str, "E%zu_%zu", level_reparts[level], level);
@@ -271,7 +286,7 @@ static void compile(const char* str)
 	case '.': {
 		struct var* rsi = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSI });
 
-		add_cmd(&(struct cmd) { .type = CMD_LEA, .arg0 = &bf_vars[var_count], .arg1 = rsi });
+		add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[var_count], .arg1 = rsi });
 
 		compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }), var_stdout,
 				rsi, add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }));
@@ -282,7 +297,7 @@ static void compile(const char* str)
 	case ',': {
 		struct var* rsi = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSI });
 
-		add_cmd(&(struct cmd) { .type = CMD_LEA, .arg0 = &bf_vars[var_count], .arg1 = rsi });
+		add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[var_count], .arg1 = rsi });
 
 		compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 }), var_stdin,
 				rsi, add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }));
@@ -306,7 +321,7 @@ static void dispence_register(struct var* var, size_t instr)
 		return;
 
 	var->type = VAR_STACK;
-	var->value.stack_offset = stack_offset++;
+	var->value.stack_offset = stack_offset += 8;
 }
 
 static void dispence_registers(void)
@@ -388,10 +403,6 @@ static void print_reg(enum reg reg, FILE* file)
 		fprintf(file, "rsp");
 		break;
 
-	case REG_R10:
-		fprintf(file, "r10");
-		break;
-
 	default:
 		break;
 	}
@@ -440,15 +451,34 @@ static void print_var(struct var* var, FILE* file)
 		fprintf(file, "%s", var->value.str);
 		break;
 
-	case VAR_REGISTER_PTR:
-		fprintf(file, "(%%");
-		print_reg(var->value.reg, file);
-		fprintf(file, ")");
+	case VAR_PROG:
+		fprintf(stderr, "bfc1: invalid internal state\n");
+		exit(1);
+	}
+}
 
+static void print_prefix(FILE* file, enum cmd_size* size)
+{
+	switch (*size) {
+	case CMD_BYTE:
+		fputc('b', file);
 		break;
 
-	case VAR_PROG:
-		exit(1);
+	case CMD_WORD:
+		fputc('w', file);
+		break;
+
+	case CMD_DWORD:
+		fputc('l', file);
+		break;
+
+	case CMD_QWORD:
+		fputc('q', file);
+		break;
+
+	default:
+		break;
+	
 	}
 }
 
@@ -470,7 +500,9 @@ static void create_asm(FILE* file)
 
 		switch (cmd->type) {
 		case CMD_ADD:	
-			fprintf(file, "\taddb ");
+			fprintf(file, "\tadd");
+			print_prefix(file, &cmd->size);
+			fputc(' ', file);
 			print_var(cmd->arg0, file);
 			fprintf(file, ", ");
 			print_var(cmd->arg1, file);
@@ -479,16 +511,9 @@ static void create_asm(FILE* file)
 			break;
 
 		case CMD_MOV:
-			fprintf(file, "\tmov ");
-			print_var(cmd->arg0, file);
-			fprintf(file, ", ");
-			print_var(cmd->arg1, file);
-			fprintf(file, "\n");
-
-			break;
-
-		case CMD_MOVB:
-			fprintf(file, "\tmovb ");
+			fprintf(file, "\tmov");
+			print_prefix(file, &cmd->size);
+			fputc(' ', file);
 			print_var(cmd->arg0, file);
 			fprintf(file, ", ");
 			print_var(cmd->arg1, file);
@@ -497,7 +522,9 @@ static void create_asm(FILE* file)
 			break;
 
 		case CMD_SUB:
-			fprintf(file, "\tsubb ");
+			fprintf(file, "\tsub");
+			print_prefix(file, &cmd->size);
+			fputc(' ', file);
 			print_var(cmd->arg0, file);
 			fprintf(file, ", ");
 			print_var(cmd->arg1, file);
@@ -506,7 +533,9 @@ static void create_asm(FILE* file)
 			break;
 
 		case CMD_XOR:
-			fprintf(file, "\txor ");
+			fprintf(file, "\txor");
+			print_prefix(file, &cmd->size);
+			fputc(' ', file);
 			print_var(cmd->arg0, file);
 			fprintf(file, ", ");
 			print_var(cmd->arg1, file);
@@ -548,7 +577,9 @@ static void create_asm(FILE* file)
 			break;
 
 		case CMD_CMP:
-			fprintf(file, "\tcmp ");
+			fprintf(file, "\tcmp");
+			print_prefix(file, &cmd->size);
+			fputc(' ', file);
 			print_var(cmd->arg0, file);
 			fprintf(file, ", ");
 			print_var(cmd->arg1, file);
@@ -558,21 +589,27 @@ static void create_asm(FILE* file)
 
 
 		case CMD_PUSH:
-			fprintf(file, "\tpushq ");
+			fprintf(file, "\tpush");
+			print_prefix(file, &cmd->size);
+			fputc(' ', file);
 			print_var(cmd->arg0, file);
 			fprintf(file, "\n");
 
 			break;
 
 		case CMD_POP:
-			fprintf(file, "\tpopq ");
+			fprintf(file, "\tpop");
+			print_prefix(file, &cmd->size);
+			fputc(' ', file);
 			print_var(cmd->arg0, file);
 			fprintf(file, "\n");
 
 			break;
 
 		case CMD_LEA:
-			fprintf(file, "\tleaq ");
+			fprintf(file, "\tlea");
+			print_prefix(file, &cmd->size);
+			fputc(' ', file);
 			print_var(cmd->arg0, file);
 			fprintf(file, ", ");
 			print_var(cmd->arg1, file);
