@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 #define MAX_PROG_SIZE 1024 * 32
 #define MAX_VARS 1024 * 2
@@ -71,6 +72,11 @@ struct var {
 		uint32_t value;
 		char str[MAX_CONST_STR];
 	} value;
+};
+
+struct var_lifetime {
+	uint32_t start_instr;
+	uint32_t end_instr;
 };
 
 enum cmd_type {
@@ -313,15 +319,70 @@ static void compile(const char* str)
 			zero_var, NULL, NULL);
 }
 
+static struct var_lifetime get_var_lifetime(struct var* var)
+{
+	struct var_lifetime lifetime;
+	uint32_t last_usage;
+	bool start_set = false;
+
+	for (int i = 0; i < cmd_count; i++) {
+		struct cmd* cmd = &cmds[i];
+		struct var* found;
+
+		if (cmd->arg0 != NULL) {
+			found = cmd->arg0;
+			goto process_founded;
+		}
+		if (cmd->arg1 != NULL) {
+			found = cmd->arg1;
+			goto process_founded;
+		}
+
+		continue;
+
+process_founded:
+		if (found != var)
+			goto done;
+
+		last_usage = i;
+		
+		if (!start_set) {
+			lifetime.start_instr = i;
+			start_set            = true;
+		}
+
+done:
+		if (found == cmd->arg0 && cmd->arg1 != NULL) {
+			found = cmd->arg1;
+			goto process_founded;
+		}
+	}
+
+	lifetime.end_instr = last_usage;
+
+	return lifetime;
+}
+
 static size_t stack_offset = 0;
 
-static void dispence_register(struct var* var, size_t instr)
+static bool try_dispence_with_registers(struct var* var, enum cmd_size size)
+{
+	return false;
+}
+
+static void dispence_with_stack(struct var* var)
+{
+	var->type = VAR_STACK;
+	var->value.stack_offset = stack_offset += 8;
+}
+
+static void dispence_register(struct var* var, struct cmd* cmd)
 {
 	if (var->type != VAR_PROG)
 		return;
 
-	var->type = VAR_STACK;
-	var->value.stack_offset = stack_offset += 8;
+	if (!try_dispence_with_registers(var, cmd->size))
+		dispence_with_stack(var);
 }
 
 static void dispence_registers(void)
@@ -329,8 +390,8 @@ static void dispence_registers(void)
 	for (int i = 0; i < cmd_count; i++) {
 		struct cmd* cmd = &cmds[i];
 
-		if (cmd->arg0 != NULL) dispence_register(cmd->arg0, i);
-		if (cmd->arg1 != NULL) dispence_register(cmd->arg1, i);
+		if (cmd->arg0 != NULL) dispence_register(cmd->arg0, cmd);
+		if (cmd->arg1 != NULL) dispence_register(cmd->arg1, cmd);
 	}
 }
 
