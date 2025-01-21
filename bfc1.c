@@ -180,18 +180,80 @@ static void generate_prolouge(void)
 	var_stdout = add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 });
 }
 
+
+static size_t level                          = 0;
+static size_t level_reparts[MAX_LEVEL_COUNT] = {0};
+static struct var* zero_var;
+
+static void generate_loop_start(void)
+{
+	struct label* label = add_label(&(struct label) { .type = LABEL, .name = {0} });
+	sprintf(label->name, "B%zu_%zu", level_reparts[level], level);
+	add_cmd(&(struct cmd) { .type = CMD_LABEL, .arg0 = 0, .arg1 = 0, .label = label });
+
+	struct var* ah = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_AH });
+	add_cmd(&(struct cmd) { .type = CMD_MOV, .size = CMD_BYTE, .arg0 = &bf_vars[var_count], .arg1 = ah });
+	add_cmd(&(struct cmd) { .type = CMD_CMP, .size = CMD_BYTE, .arg0 = zero_var, .arg1 = ah });
+
+	struct var* end_label = add_var(&(struct var) { .type = VAR_LABEL });
+	sprintf(end_label->value.str, "E%zu_%zu", level_reparts[level], level);
+	add_cmd(&(struct cmd) { .type = CMD_JE, .arg0 = end_label });
+
+	level++;
+}
+
+static void generate_loop_end(void)
+{
+	level--;
+
+	struct var* start_label = add_var(&(struct var) { .type = VAR_LABEL });
+	sprintf(start_label->value.str, "B%zu_%zu", level_reparts[level], level);
+	add_cmd(&(struct cmd) { .type = CMD_JMP, .arg0 = start_label });
+
+	struct label* label = add_label(&(struct label) { .type = LABEL, .name = {0} });
+	sprintf(label->name, "E%zu_%zu", level_reparts[level], level);
+	add_cmd(&(struct cmd) { .type = CMD_LABEL, .arg0 = 0, .arg1 = 0, .label = label });
+
+	level_reparts[level]++;
+}
+
+static void generate_print(void)
+{
+	struct var* rsi = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSI });
+
+	add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[var_count],
+			.arg1 = rsi });
+
+	compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }), var_stdout,
+			rsi, add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }));
+}
+
+static void generate_get(void)
+{
+	struct var* rsi = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSI });
+
+	add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[var_count], .arg1 = rsi });
+
+	compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 }), var_stdin,
+			rsi, add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }));
+}
+
+static void generate_epiloge(void)
+{
+	compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 60 }),
+			zero_var, NULL, NULL);
+}
+
 static void compile(const char* str)
 {
 	generate_prolouge();
 
-	struct var* zero_var = add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 });
+	zero_var = add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 });
 
 	clear_var(&bf_vars[0]);
 
-	size_t var_count                      = 0;
-	size_t unique_var_counter             = 0;
-	size_t level                          = 0;
-	size_t level_reparts[MAX_LEVEL_COUNT] = {0};
+	size_t var_count          = 0;
+	size_t unique_var_counter = 0;
 
 	for (const char* c = str; *c != '\0'; c++) switch (*c) {
 	case '>':
@@ -255,68 +317,27 @@ static void compile(const char* str)
 		break;
 	}
 	
-	case '[': {
-		struct label* label = add_label(&(struct label) { .type = LABEL, .name = {0} });
-		sprintf(label->name, "B%zu_%zu", level_reparts[level], level);
-		add_cmd(&(struct cmd) { .type = CMD_LABEL, .arg0 = 0, .arg1 = 0, .label = label });
-
-		struct var* ah = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_AH });
-		add_cmd(&(struct cmd) { .type = CMD_MOV, .size = CMD_BYTE, .arg0 = &bf_vars[var_count], .arg1 = ah });
-		add_cmd(&(struct cmd) { .type = CMD_CMP, .size = CMD_BYTE, .arg0 = zero_var, .arg1 = ah });
-
-		struct var* end_label = add_var(&(struct var) { .type = VAR_LABEL });
-		sprintf(end_label->value.str, "E%zu_%zu", level_reparts[level], level);
-		add_cmd(&(struct cmd) { .type = CMD_JE, .arg0 = end_label });
-
-		level++;
-
+	case '[':
+		generate_loop_start();
 		break;
-	}
 	
-	case ']': {
-		level--;
-
-		struct var* start_label = add_var(&(struct var) { .type = VAR_LABEL });
-		sprintf(start_label->value.str, "B%zu_%zu", level_reparts[level], level);
-		add_cmd(&(struct cmd) { .type = CMD_JMP, .arg0 = start_label });
-
-		struct label* label = add_label(&(struct label) { .type = LABEL, .name = {0} });
-		sprintf(label->name, "E%zu_%zu", level_reparts[level], level);
-		add_cmd(&(struct cmd) { .type = CMD_LABEL, .arg0 = 0, .arg1 = 0, .label = label });
-
-		level_reparts[level]++;
-
+	case ']':
+		generate_loop_end();
 		break;
-	}
 
-	case '.': {
-		struct var* rsi = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSI });
-
-		add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[var_count], .arg1 = rsi });
-
-		compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }), var_stdout,
-				rsi, add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }));
-
+	case '.':
+		generate_print();
 		break;
-	}
 
-	case ',': {
-		struct var* rsi = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSI });
-
-		add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[var_count], .arg1 = rsi });
-
-		compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 }), var_stdin,
-				rsi, add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }));
-
+	case ',':
+		generate_get();
 		break;
-	}
 
 	default:
 		  break;
 	}
 
-	compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 60 }),
-			zero_var, NULL, NULL);
+	generate_epiloge();
 }
 
 static struct var_lifetime get_var_lifetime(struct var* var)
