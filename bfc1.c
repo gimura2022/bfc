@@ -18,6 +18,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#define array_lenght(x) sizeof(x) / sizeof(x[0])
+
 #define MAX_PROG_SIZE 1024 * 32
 #define MAX_VARS 1024 * 2
 #define MAX_CMDS 1024 * 16
@@ -384,12 +386,72 @@ done:
 	return lifetime;
 }
 
-static size_t stack_offset = 0;
+static bool try_dispence_with_register(struct var* var, enum reg reg)
+{
+	for (int i = 0; i < cmd_count; i++) {
+		struct cmd* cmd = &cmds[i];
+		struct var* found;
+
+		if (cmd->arg0 != NULL) {
+			found = cmd->arg0;
+			goto process_founded;
+		}
+		if (cmd->arg1 != NULL) {
+			found = cmd->arg1;
+			goto process_founded;
+		}
+
+		continue;
+
+process_founded:
+		if (var->type != VAR_REGISTER || var->value.reg != reg)
+			goto done;
+
+		struct var_lifetime found_lifetime = get_var_lifetime(found);
+		struct var_lifetime var_lifetime   = get_var_lifetime(var);
+
+		if (var_lifetime.start_instr < found_lifetime.end_instr ||
+			var_lifetime.end_instr > found_lifetime.start_instr)
+			return false;
+
+done:
+		if (found == cmd->arg0 && cmd->arg1 != NULL) {
+			found = cmd->arg1;
+			goto process_founded;
+		}
+	}
+
+	var->type      = VAR_REGISTER;
+	var->value.reg = reg;
+
+	return true;
+}
+
+static bool try_dispence_with_registers_and_reg_array(struct var* var, enum reg* regs, size_t reg_count)
+{
+	for (int i = 0; i < reg_count; i++) {
+		enum reg reg = regs[i];
+
+		if (try_dispence_with_register(var, reg))
+			return true;
+	}
+
+	return false;
+}
 
 static bool try_dispence_with_registers(struct var* var, enum cmd_size size)
 {
-	return false;
+	static enum reg byte_regs[] = { REG_AH, REG_AL, REG_BH, REG_BL, REG_CH, REG_CL, REG_DH, REG_DL };
+
+	switch (size) {
+	case CMD_BYTE: return try_dispence_with_registers_and_reg_array(var, byte_regs,
+				       array_lenght(byte_regs));
+
+	default: return false;
+	}
 }
+
+static size_t stack_offset = 0;
 
 static void dispence_with_stack(struct var* var)
 {
