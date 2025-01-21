@@ -27,6 +27,7 @@
 #define MAX_LABELS 1024
 #define MAX_CONST_STR 128
 #define MAX_LEVEL_COUNT 128
+#define MAX_PASS 512
 
 enum var_type {
 	VAR_PROG = 0,
@@ -116,6 +117,8 @@ struct label {
 	char name[MAX_LABEL_NAME];
 };
 
+typedef void (*pass_f)(struct cmd* cmd);
+
 static struct var bf_vars[MAX_VARS];
 static struct var vars[MAX_VARS];
 static size_t var_count = 0;
@@ -125,6 +128,9 @@ static size_t cmd_count = 0;
 
 static struct label labels[MAX_LABELS];
 static size_t label_count = 0;
+
+static pass_f passes[MAX_PASS];
+static size_t pass_count = 0;
 
 static struct var* var_stdout;
 static struct var* var_stdin;
@@ -145,6 +151,11 @@ static struct var* add_var(struct var* var)
 {
 	vars[var_count++] = *var;
 	return &vars[var_count - 1];
+}
+
+static void add_pass(pass_f pass)
+{
+	passes[pass_count++] = pass;
 }
 
 static void compile_syscall(struct var* num, struct var* arg0, struct var* arg1, struct var* arg2)
@@ -763,6 +774,18 @@ static void create_asm(FILE* file)
 
 		default:
 			break;
+		}
+	}
+}
+
+static void apply_passes(void)
+{
+	for (int i = 0; i < pass_count; i++) {
+		pass_f pass = passes[i];
+	
+		for (int j = 0; j < cmd_count; j++) {
+			struct cmd* cmd = &cmds[j];
+			pass(cmd);
 		}
 	}
 }
