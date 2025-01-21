@@ -3,8 +3,8 @@
 .globl _start
 _start:
 	movq %rsp, %rbp
-	movb $0, %ah
+	xorb %ah, %ah
 	addb $3, %ah
 	movq $60, %rax
-	movq $0, %rdi
+	xorq %rdi, %rdi
 	syscall

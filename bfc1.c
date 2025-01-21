@@ -117,7 +117,7 @@ struct label {
 	char name[MAX_LABEL_NAME];
 };
 
-typedef void (*pass_f)(struct cmd* cmd);
+typedef bool (*pass_f)(struct cmd* cmd);
 
 static struct var bf_vars[MAX_VARS];
 static struct var vars[MAX_VARS];
@@ -780,14 +780,37 @@ static void create_asm(FILE* file)
 
 static void apply_passes(void)
 {
-	for (int i = 0; i < pass_count; i++) {
-		pass_f pass = passes[i];
+	bool is_optimized = true;
+
+	while (is_optimized) {
+		is_optimized = false;
+
+		for (int i = 0; i < pass_count; i++) {
+			pass_f pass = passes[i];
 	
-		for (int j = 0; j < cmd_count; j++) {
-			struct cmd* cmd = &cmds[j];
-			pass(cmd);
+			for (int j = 0; j < cmd_count; j++) {
+				struct cmd* cmd = &cmds[j];
+				is_optimized = pass(cmd) ? true : is_optimized;
+			}
 		}
 	}
+}
+
+static bool optimize_zero_mov_to_xor(struct cmd* cmd)
+{
+	if (cmd->type != CMD_MOV || cmd->arg0->type != VAR_CONST ||
+			cmd->arg0->value.value != 0)
+		return false;
+
+	cmd->type = CMD_XOR;
+	cmd->arg0 = cmd->arg1;
+
+	return true;
+}
+
+static void add_passes(void)
+{
+	add_pass(optimize_zero_mov_to_xor);
 }
 
 int main(int argc, char* argv[])
@@ -816,6 +839,8 @@ int main(int argc, char* argv[])
 
 	compile(prog_buf);
 	dispence_registers();
+	add_passes();
+	apply_passes();
 
 	FILE* out = fopen(out_path, "w");
 	if (out == NULL)
