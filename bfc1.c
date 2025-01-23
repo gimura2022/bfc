@@ -196,6 +196,7 @@ static void generate_prolouge(void)
 
 static size_t level                          = 0;
 static size_t level_reparts[MAX_LEVEL_COUNT] = {0};
+static size_t crnt_var                       = 0;
 static struct var* zero_var;
 
 static void generate_loop_start(void)
@@ -205,7 +206,7 @@ static void generate_loop_start(void)
 	add_cmd(&(struct cmd) { .type = CMD_LABEL, .arg0 = 0, .arg1 = 0, .label = label });
 
 	struct var* ah = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_AH });
-	add_cmd(&(struct cmd) { .type = CMD_MOV, .size = CMD_BYTE, .arg0 = &bf_vars[var_count], .arg1 = ah });
+	add_cmd(&(struct cmd) { .type = CMD_MOV, .size = CMD_BYTE, .arg0 = &bf_vars[crnt_var], .arg1 = ah });
 	add_cmd(&(struct cmd) { .type = CMD_CMP, .size = CMD_BYTE, .arg0 = zero_var, .arg1 = ah });
 
 	struct var* end_label = add_var(&(struct var) { .type = VAR_LABEL });
@@ -234,7 +235,7 @@ static void generate_print(void)
 {
 	struct var* rsi = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSI });
 
-	add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[var_count],
+	add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[crnt_var],
 			.arg1 = rsi });
 
 	compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }), var_stdout,
@@ -245,7 +246,8 @@ static void generate_get(void)
 {
 	struct var* rsi = add_var(&(struct var) { .type = VAR_REGISTER, .value.reg = REG_RSI });
 
-	add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[var_count], .arg1 = rsi });
+	add_cmd(&(struct cmd) { .type = CMD_LEA, .size = CMD_QWORD, .arg0 = &bf_vars[crnt_var],
+			.arg1 = rsi });
 
 	compile_syscall(add_var(&(struct var) { .type = VAR_CONST, .value.value = 0 }), var_stdin,
 			rsi, add_var(&(struct var) { .type = VAR_CONST, .value.value = 1 }));
@@ -265,37 +267,36 @@ static void compile(const char* str)
 
 	clear_var(&bf_vars[0]);
 
-	size_t var_count          = 0;
 	size_t unique_var_counter = 0;
 
 	for (const char* c = str; *c != '\0'; c++) switch (*c) {
 	case '>':
-		var_count++;
-		if (var_count > unique_var_counter) {
+		crnt_var++;
+		if (crnt_var > unique_var_counter) {
 			unique_var_counter++;
-			clear_var(&bf_vars[var_count]);
+			clear_var(&bf_vars[crnt_var]);
 		}
 
 		break;
 
 	case '<':
-		var_count--;
+		crnt_var--;
 		break;
 
 	default:
 		break;
 	}
 
-	var_count          = 0;
+	crnt_var           = 0;
 	unique_var_counter = 0;
 
 	for (const char* c = str; *c != '\0'; c++) switch (*c) {
 	case '>':
-		var_count++;
+		crnt_var++;
 		break;
 	
 	case '<':
-		var_count--;
+		crnt_var--;
 		break;
 
 	case '+': {
@@ -308,7 +309,7 @@ static void compile(const char* str)
 				.size = CMD_BYTE,
 				.arg0 = add_var(&(struct var) {
 						.type = VAR_CONST, .value.value = add_count}),
-				.arg1 = &bf_vars[var_count],
+				.arg1 = &bf_vars[crnt_var],
 		});
 
 		break;
@@ -324,7 +325,7 @@ static void compile(const char* str)
 				.size = CMD_BYTE,
 				.arg0 = add_var(&(struct var) {
 						.type = VAR_CONST, .value.value = sub_count}),
-				.arg1 = &bf_vars[var_count],
+				.arg1 = &bf_vars[crnt_var],
 		});
 
 		break;
@@ -466,8 +467,9 @@ static size_t stack_offset = 0;
 
 static void dispence_with_stack(struct var* var)
 {
-	var->type = VAR_STACK;
-	var->value.stack_offset = stack_offset += 8;
+	var->type               = VAR_STACK;
+	var->value.stack_offset = stack_offset;
+	stack_offset += 8;
 }
 
 static void dispence_register(struct var* var, struct cmd* cmd)
@@ -798,7 +800,7 @@ static void apply_passes(void)
 static bool optimize_zero_mov_to_xor(struct cmd* cmd)
 {
 	if (cmd->type != CMD_MOV || cmd->arg0->type != VAR_CONST ||
-			cmd->arg0->value.value != 0)
+			cmd->arg0->value.value != 0 || cmd->arg1->type != VAR_REGISTER)
 		return false;
 
 	cmd->type = CMD_XOR;
@@ -809,7 +811,6 @@ static bool optimize_zero_mov_to_xor(struct cmd* cmd)
 
 static void add_passes(void)
 {
-	add_pass(optimize_zero_mov_to_xor);
 }
 
 int main(int argc, char* argv[])
