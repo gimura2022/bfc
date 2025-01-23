@@ -475,8 +475,7 @@ static void dispence_register(struct var* var, struct cmd* cmd)
 	if (var->type != VAR_PROG)
 		return;
 
-	if (!try_dispence_with_registers(var, cmd->size))
-		dispence_with_stack(var);
+	dispence_with_stack(var);
 }
 
 static void dispence_registers(void)
