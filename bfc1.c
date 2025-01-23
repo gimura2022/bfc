@@ -96,6 +96,7 @@ enum cmd_type {
 	CMD_LEA,
 	CMD_PUSH,
 	CMD_POP,
+	CMD_EMPTY,
 };
 
 struct cmd {
@@ -809,8 +810,23 @@ static bool optimize_zero_mov_to_xor(struct cmd* cmd)
 	return true;
 }
 
+static bool optimize_move_regx_to_regx(struct cmd* cmd)
+{
+	if (cmd->type != CMD_MOV || cmd->arg0->type != VAR_REGISTER || cmd->arg1->type != VAR_REGISTER ||
+			cmd->arg0->value.reg != cmd->arg1->value.reg)
+		return false;
+
+	cmd->type = CMD_EMPTY;
+	cmd->arg0 = NULL;
+	cmd->arg1 = NULL;
+
+	return true;
+}
+
 static void add_passes(void)
 {
+	add_pass(optimize_zero_mov_to_xor);
+	add_pass(optimize_move_regx_to_regx);
 }
 
 int main(int argc, char* argv[])
